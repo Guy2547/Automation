@@ -5,13 +5,12 @@ import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import Modal, { FormError } from "@/components/Modal";
-import StatusPill from "@/components/StatusPill";
 import {
   createClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
 import {
-  demoEmails, demoRoleOf, getSession, hasPermission, listRoles, setDemoRole,
+  demoAddedEmails, demoEmails, demoRoleOf, deleteDemoUser, getSession, hasPermission, listRoles, setDemoRole,
   withPermissions, type Session,
 } from "@/lib/store";
 
@@ -23,9 +22,13 @@ interface UserRow {
 }
 
 function rolePill(role: string) {
-  if (role === "admin") return <StatusPill status="Maintenance" />;
-  if (role === "technician") return <StatusPill status="Running" />;
-  return <StatusPill status="Stop" />;
+  if (role === "admin")
+    return <span className="pill" style={{ background: "var(--gold-bg)", color: "var(--gold-soft)" }}><span className="dot" style={{ background: "var(--gold)", color: "var(--gold)" }} />Admin</span>;
+  if (role === "technician")
+    return <span className="pill" style={{ background: "var(--ok-bg)", color: "var(--ok)" }}><span className="dot" style={{ background: "var(--ok)", color: "var(--ok)" }} />Technician</span>;
+  if (role === "viewer")
+    return <span className="pill" style={{ background: "var(--stop-bg)", color: "var(--stop)" }}><span className="dot" style={{ background: "var(--stop)", color: "var(--stop)" }} />Viewer</span>;
+  return <span className="pill" style={{ background: "rgba(111,195,184,0.13)", color: "#6FC3B8" }}><span className="dot" style={{ background: "#6FC3B8", color: "#6FC3B8" }} />{role}</span>;
 }
 
 export default function UsersPage() {
@@ -37,6 +40,13 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ email: string; role: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("technician");
+  const [addError, setAddError] = useState<string | null>(null);
+  const [confirmDelUser, setConfirmDelUser] = useState<UserRow | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -94,6 +104,53 @@ export default function UsersPage() {
     }
   }
 
+  async function addUser() {
+    setAddError(null);
+    try {
+      const email = newEmail.trim().toLowerCase();
+      if (!email) throw new Error("กรุณากรอกอีเมล");
+      if (newPass.length < 6) throw new Error("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+      if (isSupabaseConfigured()) {
+        const res = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password: newPass, role: newRole, display_name: newName.trim() || undefined }),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "สร้าง user ไม่สำเร็จ");
+      } else {
+        setDemoRole(email, newRole);
+      }
+      setAddOpen(false);
+      setNewEmail("");
+      setNewPass("");
+      setNewName("");
+      await refresh();
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : "สร้าง user ไม่สำเร็จ");
+    }
+  }
+
+  async function removeUser() {
+    if (!confirmDelUser) return;
+    setError(null);
+    try {
+      if (isSupabaseConfigured()) {
+        if (confirmDelUser.id.startsWith("demo-")) throw new Error("แถวนี้เป็น demo fallback — ไม่มีใน Supabase");
+        const res = await fetch(`/api/admin/users?id=${encodeURIComponent(confirmDelUser.id)}`, { method: "DELETE" });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "ลบ user ไม่สำเร็จ");
+      } else {
+        deleteDemoUser(confirmDelUser.email);
+      }
+      setConfirmDelUser(null);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "ลบ user ไม่สำเร็จ");
+      setConfirmDelUser(null);
+    }
+  }
+
   const admins = users.filter((u) => u.role === "admin").length;
   const canManage = session ? hasPermission(session, "users.manage") : false;
   const canRoles = session ? hasPermission(session, "roles.manage") : false;
@@ -107,7 +164,8 @@ export default function UsersPage() {
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="users.csv" rows={users} />
-          {canRoles && <Link href="/admin/roles" className="btn-primary text-[13px] px-4 py-2 rounded-lg">Manage Roles</Link>}
+          {canManage && <button className="btn-primary text-[13px] px-4 py-2 rounded-lg" onClick={() => { setAddError(null); setNewRole(roles[0]?.name ?? "technician"); setAddOpen(true); }}>+ Add User</button>}
+          {canRoles && <Link href="/admin/roles" className="btn-ghost text-[13px] px-4 py-2 rounded-lg">Manage Roles</Link>}
         </div>
       </div>
 
@@ -125,7 +183,7 @@ export default function UsersPage() {
         </div>
         <div style={{ overflowX: "auto" }}>
         <table>
-          <thead><tr><th>User</th><th>Role</th><th>User ID</th><th>Change role</th></tr></thead>
+          <thead><tr><th>User</th><th>Role</th><th>User ID</th><th>Change role</th><th></th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.email}>
@@ -155,23 +213,63 @@ export default function UsersPage() {
                     <span className="text-[12px]" style={{ color: "var(--ink-faint)" }}>{session?.email === u.email ? "ห้ามเปลี่ยน role ตัวเอง" : "—"}</span>
                   )}
                 </td>
+                <td className="text-right pr-4">
+                  {canManage && session?.email !== u.email && (
+                    <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => setConfirmDelUser(u)}>Delete</span>
+                  )}
+                </td>
               </tr>
             ))}
-            {!loading && users.length === 0 && <tr><td colSpan={4} className="text-center" style={{ color: "var(--ink-faint)" }}>No users found</td></tr>}
+            {!loading && users.length === 0 && <tr><td colSpan={5} className="text-center" style={{ color: "var(--ink-faint)" }}>No users found</td></tr>}
           </tbody>
         </table>
         </div>
       </div>
 
       <details className="card mt-6 px-5 py-4 text-[12.5px] leading-relaxed" style={{ color: "var(--ink-soft)" }}>
-        <summary className="cursor-pointer font-semibold text-[13px]" style={{ color: "var(--ink)" }}>สร้าง / ลบ user และรีเซ็ตรหัสผ่าน (ทำใน Supabase Dashboard)</summary>
+        <summary className="cursor-pointer font-semibold text-[13px]" style={{ color: "var(--ink)" }}>รีเซ็ตรหัสผ่าน (ทำใน Supabase Dashboard)</summary>
         <ol className="list-decimal ml-5 mt-2">
-          <li>Authentication → Users → Create user (ติ๊ก Auto Confirm) — รหัสเก็บแบบ hash อัตโนมัติ</li>
-          <li>SQL Editor → insert แถวใน <span className="mono">profiles</span> ด้วย UUID ของ user นั้น</li>
-          <li>ลบ user / รีเซ็ตรหัส: จัดการที่หน้า Users ใน Dashboard เท่านั้น (browser ทำไม่ได้ด้วย anon key)</li>
+          <li>Authentication → Users → เลือก user → Reset password (รหัสเก็บแบบ hash อัตโนมัติ)</li>
+          <li>สร้าง/ลบ user ทำได้จากปุ่มบนหน้านี้ (ต้องตั้ง SUPABASE_SERVICE_ROLE_KEY ฝั่ง server ก่อน)</li>
         </ol>
       </details>
 
+      {confirmDelUser && (
+        <Modal title="Delete user" onClose={() => setConfirmDelUser(null)}>
+          <p className="text-[13.5px] mb-4" style={{ color: "var(--ink-soft)" }}>
+            ลบ <b style={{ color: "var(--ink)" }}>{confirmDelUser.email}</b>? จะลบ auth user + ข้อมูล profile ถาวร
+            {isSupabaseConfigured() ? "" : " (demo mode: ลบได้เฉพาะ user ที่สร้างเพิ่ม)"}
+          </p>
+          <div className="flex gap-2">
+            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setConfirmDelUser(null)}>Cancel</button>
+            <button className="text-[13px] px-3 py-2 rounded-lg flex-1" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }} onClick={removeUser}>Delete</button>
+          </div>
+        </Modal>
+      )}
+
+      {addOpen && (
+        <Modal title="Add User" onClose={() => setAddOpen(false)}>
+          <FormError message={addError} />
+          <div className="field"><label>Email *</label>
+            <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="tech2@test.com" autoComplete="off" />
+          </div>
+          <div className="field"><label>Password * (≥6 ตัวอักษร, เก็บแบบ hash ฝั่ง Supabase Auth)</label>
+            <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="••••••" autoComplete="new-password" />
+          </div>
+          <div className="field"><label>Display name</label>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Suda K." />
+          </div>
+          <div className="field"><label>Role</label>
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              {roles.map((r) => <option key={r.name} value={r.name}>{r.display_name || r.name}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setAddOpen(false)}>Cancel</button>
+            <button className="btn-primary text-[13px] px-3 py-2 rounded-lg flex-1" onClick={addUser}>Create User</button>
+          </div>
+        </Modal>
+      )}
       {confirm && (
         <Modal title="Confirm role change" onClose={() => setConfirm(null)}>
           <FormError message={null} />

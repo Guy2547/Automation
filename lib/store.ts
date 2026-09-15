@@ -283,6 +283,18 @@ export function demoEmails(): string[] {
   const base = ["admin@test.com", "technician@test.com"];
   return [...new Set([...base, ...Object.keys(overrides)])];
 }
+/** Emails added in demo mode (base demo users cannot be removed). */
+export function demoAddedEmails(): string[] {
+  return Object.keys(read<Record<string, Role>>(U_KEY, {}));
+}
+export function deleteDemoUser(email: string) {
+  const key = email.trim().toLowerCase();
+  if (key === "admin@test.com" || key === "technician@test.com")
+    throw new Error("Demo user หลักลบไม่ได้ (ลบได้เฉพาะ user ที่สร้างเพิ่ม)");
+  const overrides = read<Record<string, Role>>(U_KEY, {});
+  delete overrides[key];
+  write(U_KEY, overrides);
+}
 export function demoRoleOf(email: string): Role {
   const overrides = read<Record<string, Role>>(U_KEY, {});
   if (overrides[email]) return overrides[email];
