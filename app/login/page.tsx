@@ -57,6 +57,9 @@ export default function LoginPage() {
         <div className="text-[11.5px] mt-4 leading-relaxed" style={{ color: "var(--ink-faint)" }}>
           Demo: <span className="mono">admin@test.com / admin123</span> (Admin) · <span className="mono">technician@test.com / tech1234</span> (Technician)
         </div>
+        <div className="text-[11px] mt-3 leading-relaxed" style={{ color: "var(--ink-faint)" }}>
+          ผู้จัดทำ: อมรินทร์ ขวัญคีรี 056860405008-4 · ณัฐพล ล่องทอง 056860405067-0 · อินทัช เวนานนท์ 056960405159-3
+        </div>
       </div>
     </div>
   );
