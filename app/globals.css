@@ -385,6 +385,94 @@ select option {
   }
 }
 
+/* ---------- ROLE CARDS ---------- */
+.role-card {
+  position: relative;
+  overflow: hidden;
+}
+.role-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--role-accent, linear-gradient(90deg, var(--gold), #c98a2c));
+}
+.perm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.perm-row:last-child {
+  border-bottom: none;
+}
+.perm-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.perm-group-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 10px 0 2px;
+}
+
+/* ---------- TOGGLE SWITCH ---------- */
+.switch {
+  position: relative;
+  width: 34px;
+  height: 19px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.switch .track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--line);
+  transition: all 0.2s ease;
+}
+.switch .track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #8fa398;
+  transition: all 0.2s ease;
+}
+.switch input:checked + .track {
+  background: rgba(240, 189, 75, 0.25);
+  border-color: rgba(240, 189, 75, 0.5);
+}
+.switch input:checked + .track::after {
+  left: 17px;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(240, 189, 75, 0.6);
+}
+
 /* ---------- RESPONSIVE ---------- */
 @media (max-width: 880px) {
   .app-shell {
