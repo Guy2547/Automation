@@ -8,7 +8,7 @@ import { login } from "@/lib/store";
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("admin@test.com");
-  const [password, setPassword] = useState("admin123");
+  const [password, setPassword] = useState("admin1234");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -55,7 +55,7 @@ export default function LoginPage() {
           </button>
         </form>
         <div className="text-[11.5px] mt-4 leading-relaxed" style={{ color: "var(--ink-faint)" }}>
-          Demo: <span className="mono">admin@test.com / admin123</span> (Admin) · <span className="mono">technician@test.com / tech1234</span> (Technician)
+          Demo: <span className="mono">admin@test.com / admin1234</span> (Admin) · <span className="mono">technician@test.com / technician1234</span> (Technician)
         </div>
         <div className="text-[11px] mt-3 leading-relaxed" style={{ color: "var(--ink-faint)" }}>
           ผู้จัดทำ: อมรินทร์ ขวัญคีรี 056860405008-4 · ณัฐพล ล่องทอง 056860405067-0 · อินทัช เวนานนท์ 056960405159-3
