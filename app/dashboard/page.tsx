@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import StatusPill from "@/components/StatusPill";
-import { getSession, listAlarms, listMachines, listMaintenance, type Session } from "@/lib/store";
+import { getSession, hasPermission, listAlarms, listMachines, listMaintenance, withPermissions, type Session } from "@/lib/store";
 
 export default function DashboardPage() {
   const [session, setSession] = useState<Session | null>(null);
@@ -24,7 +24,8 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    setSession(getSession());
+    const raw = getSession();
+    setSession(raw ? withPermissions(raw) : null);
     setMachines(listMachinesSafe());
     setAlarms(listAlarmsSafe());
     setMaint(listMaintSafe());
@@ -84,7 +85,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-2 self-start flex-shrink-0">
-          {session?.role === "admin" && (
+          {session && hasPermission(session, "machines.manage") && (
             <Link href="/machines" className="btn-primary text-[13px] px-4 py-2.5 rounded-lg text-center">+ Add Machine</Link>
           )}
           <ExportCsvButton filename="machines.csv" rows={machines} />

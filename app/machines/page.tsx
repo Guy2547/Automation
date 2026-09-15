@@ -7,7 +7,7 @@ import ExportCsvButton from "@/components/ExportCsvButton";
 import Modal, { FormError } from "@/components/Modal";
 import StatusPill from "@/components/StatusPill";
 import {
-  createMachine, deleteMachine, getSession, listMachines, updateMachine,
+  createMachine, deleteMachine, getSession, hasPermission, listMachines, updateMachine, withPermissions,
   type Session,
 } from "@/lib/store";
 import { MACHINE_STATUSES, type Machine, type MachineStatus } from "@/lib/types";
@@ -25,13 +25,14 @@ export default function MachinesPage() {
   const [form, setForm] = useState(empty);
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = session?.role === "admin";
+  const canManage = session ? hasPermission(session, "machines.manage") : false;
 
   function refresh() {
     try { setRows(listMachines()); } catch { /* ignore */ }
   }
   useEffect(() => {
-    setSession(getSession());
+    const raw = getSession();
+    setSession(raw ? withPermissions(raw) : null);
     refresh();
   }, []);
 
@@ -74,7 +75,7 @@ export default function MachinesPage() {
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="machines.csv" rows={filtered} />
-          {isAdmin && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>+ Add Machine</button>}
+          {canManage && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>+ Add Machine</button>}
         </div>
       </div>
 
@@ -103,7 +104,7 @@ export default function MachinesPage() {
                 <td><StatusPill status={m.status} /></td>
                 <td className="text-right pr-4 whitespace-nowrap">
                   <Link href={`/machines/${m.id}`} className="text-[12px] mr-3" style={{ color: "var(--ink-faint)" }}>History</Link>
-                  {isAdmin && (
+                  {canManage && (
                     <>
                       <span className="text-[12px] mr-3" style={{ color: "var(--ink-faint)", cursor: "pointer" }} onClick={() => startEdit(m)}>Edit</span>
                       <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => { if (confirm(`Delete ${m.machine_id}?`)) { deleteMachine(m.id); refresh(); } }}>Delete</span>
@@ -117,7 +118,7 @@ export default function MachinesPage() {
         </table>
         </div>
       </div>
-      {!isAdmin && <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>Technician mode — read-only. Only Admin can Add / Edit / Delete machines.</div>}
+      {!canManage && <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>Read-only mode — Only users with machines.manage permission can Add / Edit / Delete.</div>}
 
       {open && (
         <Modal title={editing ? "Edit Machine" : "Add Machine"} onClose={() => setOpen(false)}>

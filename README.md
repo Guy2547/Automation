@@ -9,7 +9,9 @@ Web Application สนับสนุนงาน Automation / โรงงา�
 
 | หน้า | ความสามารถ |
 |---|---|
-| `/login` | Supabase Authentication (email/password, hash ด้วย bcrypt ฝั่ง Supabase Auth), 2 Role: Admin / Technician |
+| `/login` | Supabase Authentication (email/password, hash ด้วย bcrypt ฝั่ง Supabase Auth), Roles: Admin / Technician / Viewer + สร้าง custom role ได้ |
+| `/admin/users` | ตาราง users + เปลี่ยน role (admin เท่านั้น, ห้ามเปลี่ยน role ตัวเอง) |
+| `/admin/roles` | สร้าง/แก้/ลบ custom roles + เมทริกซ์ permissions (built-in ลบไม่ได้) |
 | `/dashboard` | จำนวนเครื่องทั้งหมด, Running / Stop / Alarm / Maintenance, จำนวน Alarm + Maintenance, gauge uptime, timeline, ตารางล่าสุด |
 | `/machines` | CRUD Machine Master (Machine ID unique, Name, Type, Location, Status) + Search + Filter Status/Location — Admin เท่านั้นที่ Add/Edit/Delete |
 | `/machines/[id]` | Machine History (Bonus) — Alarm + Maintenance ของเครื่องนั้น |
@@ -21,7 +23,7 @@ Web Application สนับสนุนงาน Automation / โรงงา�
 
 ## Database Structure (Supabase)
 
-`profiles(id→auth.users, email, role[admin|technician], display_name)` · `machines(id, machine_id UNIQUE, name, type, location, status[Running|Stop|Alarm|Maintenance])` · `alarms(id, machine_id→machines, alarm_code UNIQUE, description, occurred_at, cause, status[Open|In Progress|Closed])` · `maintenance_records(id, machine_id→machines, maintenance_type[Preventive|Corrective|Emergency], problem, action_taken, technician, date, status[Open|In Progress|Closed|Waiting Part])` — RLS: อ่านได้หลัง login, เขียนตาม role (ดู `supabase/schema.sql`)
+`profiles(id→auth.users, email, role→roles.name, display_name)` · `roles(name PK, display_name, permissions jsonb, is_builtin)` · `machines(id, machine_id UNIQUE, name, type, location, status[Running|Stop|Alarm|Maintenance])` · `alarms(id, machine_id→machines, alarm_code UNIQUE, description, occurred_at, cause, status[Open|In Progress|Closed])` · `maintenance_records(id, machine_id→machines, maintenance_type[Preventive|Corrective|Emergency], problem, action_taken, technician, date, status[Open|In Progress|Closed|Waiting Part])` — RLS: อ่านได้หลัง login, เขียนตาม role (ดู `supabase/schema.sql`)
 
 รหัสผ่านไม่ถูกเก็บในตารางใดๆ — Supabase Auth เก็บเฉพาะ bcrypt hash ใน `auth.users`
 

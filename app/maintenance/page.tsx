@@ -6,7 +6,7 @@ import ExportCsvButton from "@/components/ExportCsvButton";
 import Modal, { FormError } from "@/components/Modal";
 import StatusPill from "@/components/StatusPill";
 import {
-  createMaintenance, deleteMaintenance, getSession, listMachines, listMaintenance, updateMaintenance,
+  createMaintenance, deleteMaintenance, getSession, hasPermission, listMachines, listMaintenance, updateMaintenance, withPermissions,
   type Session,
 } from "@/lib/store";
 import { MAINT_STATUSES, MAINT_TYPES, type MaintenanceRecord, type MaintenanceStatus, type MaintenanceType } from "@/lib/types";
@@ -22,14 +22,16 @@ export default function MaintenancePage() {
   const [form, setForm] = useState({ machine_id: "", maintenance_type: "Corrective" as MaintenanceType, problem: "", action_taken: "", technician: "", date: "2026-09-15", status: "Open" as MaintenanceStatus });
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = session?.role === "admin";
+  const canEdit = session ? hasPermission(session, "maintenance.edit") : false;
+  const canDelete = session ? hasPermission(session, "maintenance.delete") : false;
   const machines = (() => { try { return listMachines(); } catch { return []; } })();
 
   function refresh() {
     try { setRows(listMaintenance()); } catch { /* ignore */ }
   }
   useEffect(() => {
-    setSession(getSession());
+    const raw = getSession();
+    setSession(raw ? withPermissions(raw) : null);
     refresh();
   }, []);
 
@@ -83,7 +85,7 @@ export default function MaintenancePage() {
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="maintenance.csv" rows={filtered} />
-          <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>+ New Record</button>
+          {canEdit && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>+ New Record</button>}
         </div>
       </div>
 
@@ -110,8 +112,8 @@ export default function MaintenancePage() {
                 <td className="mono" style={{ color: "var(--ink-soft)" }}>{t.date}</td>
                 <td><StatusPill status={t.status} /></td>
                 <td className="text-right pr-4 whitespace-nowrap">
-                  <span className="text-[12px] mr-3" style={{ color: "var(--ink-faint)", cursor: "pointer" }} onClick={() => startEdit(t)}>Edit</span>
-                  {isAdmin && <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => { if (confirm("Delete this record?")) { deleteMaintenance(t.id); refresh(); } }}>Delete</span>}
+                  {canEdit && <span className="text-[12px] mr-3" style={{ color: "var(--ink-faint)", cursor: "pointer" }} onClick={() => startEdit(t)}>Edit</span>}
+                  {canDelete && <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => { if (confirm("Delete this record?")) { deleteMaintenance(t.id); refresh(); } }}>Delete</span>}
                 </td>
               </tr>
             ))}
@@ -120,7 +122,7 @@ export default function MaintenancePage() {
         </table>
         </div>
       </div>
-      {!isAdmin && <div className="text-[12px] mt-3" style={{ color: "var(--ink-faint)" }}>Technician — สร้าง/แก้ไขได้, ลบไม่ได้ (เฉพาะ Admin)</div>}
+      {!canEdit && <div className="text-[12px] mt-3" style={{ color: "var(--ink-faint)" }}>Read-only role — สร้าง/แก้ไข/ลบ ต้องมีสิทธิ์ maintenance.edit ขึ้นไป</div>}
 
       {open && (
         <Modal title={editing ? "Edit Maintenance Record" : "New Maintenance Record"} onClose={() => setOpen(false)}>

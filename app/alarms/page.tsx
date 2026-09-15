@@ -6,7 +6,7 @@ import ExportCsvButton from "@/components/ExportCsvButton";
 import Modal, { FormError } from "@/components/Modal";
 import StatusPill from "@/components/StatusPill";
 import {
-  createAlarm, deleteAlarm, getSession, listAlarms, listMachines, updateAlarm,
+  createAlarm, deleteAlarm, getSession, hasPermission, listAlarms, listMachines, updateAlarm, withPermissions,
   type Session,
 } from "@/lib/store";
 import { ALARM_STATUSES, type Alarm, type AlarmStatus } from "@/lib/types";
@@ -22,14 +22,17 @@ export default function AlarmsPage() {
   const [form, setForm] = useState({ machine_id: "", alarm_code: "", description: "", occurred_at: "", cause: "", status: "Open" as AlarmStatus });
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = session?.role === "admin";
+  const canDelete = session ? hasPermission(session, "alarms.delete") : false;
+  const canChangeStatus = session ? hasPermission(session, "alarms.status") : false;
+  const canReport = canChangeStatus;
   const machines = (() => { try { return listMachines(); } catch { return []; } })();
 
   function refresh() {
     try { setRows(listAlarms()); } catch { /* ignore */ }
   }
   useEffect(() => {
-    setSession(getSession());
+    const raw = getSession();
+    setSession(raw ? withPermissions(raw) : null);
     refresh();
   }, []);
 
@@ -73,7 +76,7 @@ export default function AlarmsPage() {
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="alarms.csv" rows={filtered} />
-          <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={() => { setError(null); setOpen(true); }}>+ Report Alarm</button>
+          {canReport && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={() => { setError(null); setOpen(true); }}>+ Report Alarm</button>}
         </div>
       </div>
 
@@ -105,6 +108,7 @@ export default function AlarmsPage() {
                 <td className="mono" style={{ color: "var(--ink-soft)" }}>{a.occurred_at}</td>
                 <td style={{ color: "var(--ink-soft)" }}>{a.cause}</td>
                 <td>
+                  {canChangeStatus ? (
                   <select
                     className="text-[12px] px-2 py-1 rounded-md"
                     value={a.status}
@@ -112,9 +116,12 @@ export default function AlarmsPage() {
                   >
                     {ALARM_STATUSES.map((s) => <option key={s}>{s}</option>)}
                   </select>
+                  ) : (
+                    <StatusPill status={a.status} />
+                  )}
                 </td>
                 <td className="text-right pr-4">
-                  {isAdmin && <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => { if (confirm(`Delete ${a.alarm_code}?`)) { deleteAlarm(a.id); refresh(); } }}>Delete</span>}
+                  {canDelete && <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => { if (confirm(`Delete ${a.alarm_code}?`)) { deleteAlarm(a.id); refresh(); } }}>Delete</span>}
                 </td>
               </tr>
             ))}
@@ -124,7 +131,7 @@ export default function AlarmsPage() {
         </div>
       </div>
       <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-        {isAdmin ? "Admin — full manage." : "Technician — เปลี่ยนสถานะ Alarm ได้ (dropdown), ลบไม่ได้"} · Filter วันที่ (from/to) ใช้กับ export และเป็น Bonus date-range filter
+        Role: {session?.role} · {canDelete ? "full manage" : canChangeStatus ? "เปลี่ยนสถานะ Alarm ได้, ลบไม่ได้" : "read-only"} · Filter วันที่ (from/to) ใช้กับ export
       </div>
 
       {open && (

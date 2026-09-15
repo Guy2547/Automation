@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Mascot from "./Mascot";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
-import { getSession, listAlarms, type Session } from "@/lib/store";
+import { getSession, hasPermission, listAlarms, withPermissions, type Session } from "@/lib/store";
 
 const mascotMsgs: Record<string, string> = {
   dashboard: "3 alarms need a look today — Conveyor 05 first!",
@@ -31,12 +31,17 @@ export default function AppShell({
   const [openCount, setOpenCount] = useState(0);
 
   useEffect(() => {
-    const s = getSession();
-    if (!s) {
+    const raw = getSession();
+    if (!raw) {
       router.replace("/login");
       return;
     }
-    if (crumb === "Users" && s.role !== "admin") {
+    const s = withPermissions(raw);
+    if (crumb === "Users" && !hasPermission(s, "users.manage")) {
+      router.replace("/dashboard");
+      return;
+    }
+    if (crumb === "Roles" && !hasPermission(s, "roles.manage")) {
       router.replace("/dashboard");
       return;
     }

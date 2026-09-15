@@ -2,18 +2,21 @@
 
 import { createClient, isSupabaseConfigured } from "./supabase/client";
 import { seedAlarms, seedMachines, seedMaintenance } from "./mock";
-import type { Alarm, Machine, MaintenanceRecord, Role } from "./types";
+import { DEMO_ROLE_PERMS, seedRoles, type Alarm, type Machine, type MaintenanceRecord, type Role, type RoleRow } from "./types";
 
 export interface Session {
   email: string;
   role: Role;
   name: string;
+  permissions?: Record<string, boolean>;
 }
 
 const S_KEY = "amms.session";
 const M_KEY = "amms.machines";
 const A_KEY = "amms.alarms";
 const T_KEY = "amms.maintenance";
+const R_KEY = "amms.roles";
+const U_KEY = "amms.user_roles"; // demo-mode email -> role overrides
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -35,6 +38,39 @@ export function ensureSeed() {
   if (!localStorage.getItem(M_KEY)) write(M_KEY, seedMachines);
   if (!localStorage.getItem(A_KEY)) write(A_KEY, seedAlarms);
   if (!localStorage.getItem(T_KEY)) write(T_KEY, seedMaintenance);
+  if (!localStorage.getItem(R_KEY)) write(R_KEY, seedRoles);
+}
+
+/** Resolve effective permissions for a role (demo map; Supabase roles table when configured at login). */
+export function permsFor(role: Role): Record<string, boolean> {
+  if (DEMO_ROLE_PERMS[role]) return DEMO_ROLE_PERMS[role];
+  try {
+    const custom = listRoles().find((r) => r.name === role);
+    if (custom) return custom.permissions;
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+export function hasPermission(session: Session | null, key: string): boolean {
+  if (!session) return false;
+  if (session.permissions) return session.permissions[key] === true;
+  if (session.role === "admin") return true;
+  return permsFor(session.role)[key] === true;
+}
+
+/** Backfill permissions for sessions stored before roles existed. */
+export function withPermissions(s: Session): Session {
+  if (s.permissions) return s;
+  const out = { ...s, permissions: permsFor(s.role) };
+  try {
+    const cur = read<Session | null>(S_KEY, null);
+    if (cur && cur.email === s.email) write(S_KEY, out);
+  } catch {
+    /* ignore */
+  }
+  return out;
 }
 
 /* ---------------- Auth ----------------
@@ -63,22 +99,38 @@ export async function login(email: string, password: string): Promise<Session> {
       role = (profile.role as Role) ?? "technician";
       name = profile.display_name ?? name;
     } else if (email.startsWith("admin")) role = "admin";
-    const s: Session = { email, role, name };
+    // permissions from roles table (fallback to demo map if migration not run yet)
+    let permissions = permsFor(role);
+    try {
+      const { data: roleRow } = await supabase
+        .from("roles")
+        .select("permissions")
+        .eq("name", role)
+        .single();
+      if (roleRow?.permissions) permissions = roleRow.permissions as Record<string, boolean>;
+    } catch {
+      /* keep fallback */
+    }
+    const s: Session = { email, role, name, permissions };
     write(S_KEY, s);
     return s;
   }
 
   // demo mode
+  const overrides = read<Record<string, Role>>(U_KEY, {});
   let role: Role = "technician";
   let name = "Tech User";
-  if (email.startsWith("admin")) {
+  if (overrides[email]) {
+    role = overrides[email];
+    name = email.split("@")[0];
+  } else if (email.startsWith("admin")) {
     role = "admin";
     name = "Kaito T.";
   } else if (email.startsWith("tech")) {
     role = "technician";
     name = "Anan P.";
   }
-  const s: Session = { email, role, name };
+  const s: Session = { email, role, name, permissions: permsFor(role) };
   write(S_KEY, s);
   return s;
 }
@@ -184,6 +236,58 @@ export function updateMaintenance(id: string, patch: Partial<MaintenanceRecord>)
 }
 export function deleteMaintenance(id: string) {
   write(T_KEY, listMaintenance().filter((t) => t.id !== id));
+}
+
+/* ---------------- Roles ---------------- */
+export function listRoles(): RoleRow[] {
+  ensureSeed();
+  return read<RoleRow[]>(R_KEY, seedRoles);
+}
+export function createRole(input: Omit<RoleRow, "is_builtin">): RoleRow {
+  const name = input.name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  if (!name) throw new Error("Role name ห้ามว่าง (a-z, 0-9, -, _)");
+  if (!input.display_name.trim()) throw new Error("Display name ห้ามว่าง");
+  const rows = listRoles();
+  if (rows.some((r) => r.name === name)) throw new Error("Role นี้มีอยู่แล้ว (ห้ามซ้ำ)");
+  const row: RoleRow = { name, display_name: input.display_name.trim(), permissions: input.permissions, is_builtin: false };
+  write(R_KEY, [...rows, row]);
+  return row;
+}
+export function updateRole(name: string, patch: Partial<RoleRow>): RoleRow {
+  const rows = listRoles();
+  const i = rows.findIndex((r) => r.name === name);
+  if (i < 0) throw new Error("ไม่พบ role");
+  rows[i] = { ...rows[i], ...patch, name };
+  write(R_KEY, rows);
+  return rows[i];
+}
+export function deleteRole(name: string) {
+  const rows = listRoles();
+  const target = rows.find((r) => r.name === name);
+  if (!target) throw new Error("ไม่พบ role");
+  if (target.is_builtin) throw new Error("ห้ามลบ built-in role (admin/technician/viewer)");
+  write(R_KEY, rows.filter((r) => r.name !== name));
+}
+/** Demo-mode: override a user's role by email (real mode: update profiles in Supabase). */
+export function setDemoRole(email: string, role: Role) {
+  const overrides = read<Record<string, Role>>(U_KEY, {});
+  overrides[email.trim().toLowerCase()] = role;
+  write(U_KEY, overrides);
+  const cur = read<Session | null>(S_KEY, null);
+  if (cur && cur.email === email.trim().toLowerCase()) {
+    write(S_KEY, { ...cur, role, permissions: permsFor(role) });
+  }
+}
+export function demoEmails(): string[] {
+  const overrides = read<Record<string, Role>>(U_KEY, {});
+  const base = ["admin@test.com", "technician@test.com"];
+  return [...new Set([...base, ...Object.keys(overrides)])];
+}
+export function demoRoleOf(email: string): Role {
+  const overrides = read<Record<string, Role>>(U_KEY, {});
+  if (overrides[email]) return overrides[email];
+  if (email.startsWith("admin")) return "admin";
+  return "technician";
 }
 
 /* ---------------- CSV ---------------- */

@@ -1,4 +1,4 @@
-export type Role = "admin" | "technician";
+export type Role = string;
 
 export type MachineStatus = "Running" | "Stop" | "Alarm" | "Maintenance";
 export type AlarmStatus = "Open" | "In Progress" | "Closed";
@@ -50,3 +50,46 @@ export const MACHINE_STATUSES: MachineStatus[] = ["Running", "Stop", "Alarm", "M
 export const ALARM_STATUSES: AlarmStatus[] = ["Open", "In Progress", "Closed"];
 export const MAINT_TYPES: MaintenanceType[] = ["Preventive", "Corrective", "Emergency"];
 export const MAINT_STATUSES: MaintenanceStatus[] = ["Open", "In Progress", "Closed", "Waiting Part"];
+
+/* ---------------- Roles & permissions ---------------- */
+export interface RoleRow {
+  name: string;
+  display_name: string;
+  permissions: Record<string, boolean>;
+  is_builtin: boolean;
+}
+
+export const PERMISSION_KEYS: { key: string; label: string }[] = [
+  { key: "machines.manage", label: "Manage machines (add/edit/delete)" },
+  { key: "alarms.status", label: "Change alarm status" },
+  { key: "alarms.delete", label: "Delete alarms" },
+  { key: "maintenance.edit", label: "Create/edit maintenance" },
+  { key: "maintenance.delete", label: "Delete maintenance" },
+  { key: "users.manage", label: "Manage users & roles" },
+  { key: "roles.manage", label: "Create/edit roles" },
+  { key: "export", label: "Export CSV" },
+];
+
+const ALL_TRUE: Record<string, boolean> = Object.fromEntries(
+  PERMISSION_KEYS.map((p) => [p.key, true])
+);
+
+export const DEMO_ROLE_PERMS: Record<string, Record<string, boolean>> = {
+  admin: { ...ALL_TRUE },
+  technician: {
+    ...Object.fromEntries(PERMISSION_KEYS.map((p) => [p.key, false])),
+    "alarms.status": true,
+    "maintenance.edit": true,
+    export: true,
+  },
+  viewer: {
+    ...Object.fromEntries(PERMISSION_KEYS.map((p) => [p.key, false])),
+    export: true,
+  },
+};
+
+export const seedRoles: RoleRow[] = [
+  { name: "admin", display_name: "Administrator", permissions: DEMO_ROLE_PERMS.admin, is_builtin: true },
+  { name: "technician", display_name: "Technician", permissions: DEMO_ROLE_PERMS.technician, is_builtin: true },
+  { name: "viewer", display_name: "Viewer (read-only)", permissions: DEMO_ROLE_PERMS.viewer, is_builtin: true },
+];

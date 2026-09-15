@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getSession, logout, type Session } from "@/lib/store";
+import { getSession, hasPermission, logout, withPermissions, type Session } from "@/lib/store";
 
 const monitor = [
   { href: "/dashboard", label: "Dashboard", icon: <><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></> },
@@ -21,7 +21,8 @@ export default function Sidebar({ openCount = 0 }: { openCount?: number }) {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    setSession(getSession());
+    const raw = getSession();
+    setSession(raw ? withPermissions(raw) : null);
   }, [pathname]);
 
   const item = (href: string, label: string, icon: React.ReactNode) => {
@@ -61,7 +62,8 @@ export default function Sidebar({ openCount = 0 }: { openCount?: number }) {
       <div className="nav-section-label">Manage</div>
       <nav className="flex flex-col gap-1.5 px-1">
         {manage.map((m) => item(m.href, m.label, m.icon))}
-        {session?.role === "admin" && item("/admin/users", "Users", <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" /></>)}
+        {session && hasPermission(session, "users.manage") && item("/admin/users", "Users", <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" /></>)}
+        {session && hasPermission(session, "roles.manage") && item("/admin/roles", "Roles", <><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z" /></>)}
       </nav>
 
       <div className="mt-auto px-3 pt-4 border-t" style={{ borderColor: "var(--line)" }}>
