@@ -12,8 +12,10 @@ import { seedMachines } from "./mock";
 import type { Machine } from "./types";
 
 export const TICK_MS = 3000;
+export const SPEEDS = [1, 3, 5, 10];
 const SIM_KEY = "amms.sim";
 const LIVE_KEY = "amms.simLive";
+const SPEED_KEY = "amms.simSpeed";
 const M_KEY = "amms.machines";
 
 interface Pending {
@@ -202,8 +204,26 @@ export function resetSimulation() {
   }
 }
 
+/** Persisted tick interval in seconds (shared across pages). */
+export function getSimSpeed(): number {
+  try {
+    const v = Number(localStorage.getItem(SPEED_KEY));
+    if (SPEEDS.includes(v)) return v;
+  } catch {
+    /* ignore */
+  }
+  return 3;
+}
+export function setSimSpeed(sec: number) {
+  try {
+    if (SPEEDS.includes(sec)) localStorage.setItem(SPEED_KEY, String(sec));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Run the tick loop while `active`. Calls `refresh` after every tick. */
-export function useSimulatorTick(active: boolean, refresh: () => void) {
+export function useSimulatorTick(active: boolean, intervalMs: number, refresh: () => void) {
   useEffect(() => {
     if (!active) return;
     const id = setInterval(() => {
@@ -213,8 +233,8 @@ export function useSimulatorTick(active: boolean, refresh: () => void) {
         /* sim must never break the page */
       }
       refresh();
-    }, TICK_MS);
+    }, intervalMs);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, intervalMs]);
 }

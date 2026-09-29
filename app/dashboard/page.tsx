@@ -7,7 +7,7 @@ import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import StatusPill from "@/components/StatusPill";
 import { getSession, hasPermission, listAlarms, listMachines, listMaintenance, withPermissions, type Session } from "@/lib/store";
-import { isSimLive, resetSimulation, setSimLive, useSimulatorTick } from "@/lib/simulator";
+import { SPEEDS, getSimSpeed, isSimLive, resetSimulation, setSimLive, setSimSpeed, useSimulatorTick } from "@/lib/simulator";
 
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
@@ -26,6 +26,9 @@ export default function DashboardPage() {
   const [maint, setMaint] = useState(listMaintSafe);
   const [live, setLive] = useState(() => {
     try { return isSimLive(); } catch { return true; }
+  });
+  const [speed, setSpeed] = useState(() => {
+    try { return getSimSpeed(); } catch { return 3; }
   });
 
   function listMachinesSafe() {
@@ -51,12 +54,16 @@ export default function DashboardPage() {
     setAlarms(listAlarmsSafe());
     setMaint(listMaintSafe());
   }
-  useSimulatorTick(live, refreshSim);
+  useSimulatorTick(live, speed * 1000, refreshSim);
 
   function toggleLive() {
     const next = !live;
     setLive(next);
     setSimLive(next);
+  }
+  function changeSpeed(v: number) {
+    setSpeed(v);
+    setSimSpeed(v);
   }
   function resetSim() {
     resetSimulation();
@@ -129,6 +136,14 @@ export default function DashboardPage() {
             <span className="dot" style={{ background: live ? "var(--ok)" : "var(--ink-faint)", color: live ? "var(--ok)" : "var(--ink-faint)" }} />
             {live ? t("live") : t("paused")}
           </button>
+          <select
+            className="btn-ghost text-[12px] font-medium px-2 py-2 rounded-lg"
+            value={speed}
+            onChange={(e) => changeSpeed(Number(e.target.value))}
+            title={t("speed")}
+          >
+            {SPEEDS.map((s) => <option key={s} value={s}>{t("every", { n: s })}</option>)}
+          </select>
           <button className="text-[11.5px] px-3 py-1.5 rounded-lg" style={{ color: "var(--ink-faint)" }} onClick={resetSim}>
             {t("resetSim")}
           </button>

@@ -13,7 +13,7 @@ import {
   type Session,
 } from "@/lib/store";
 import { logActivity } from "@/lib/activity";
-import { isSimLive, resetSimulation, setSimLive, useSimulatorTick } from "@/lib/simulator";
+import { SPEEDS, getSimSpeed, isSimLive, resetSimulation, setSimLive, setSimSpeed, useSimulatorTick } from "@/lib/simulator";
 import { MACHINE_STATUSES, type Machine, type MachineStatus } from "@/lib/types";
 
 const empty = { machine_id: "", name: "", type: "", location: "", status: "Running" as MachineStatus };
@@ -42,6 +42,9 @@ export default function MachinesPage() {
   const [live, setLive] = useState(() => {
     try { return isSimLive(); } catch { return true; }
   });
+  const [speed, setSpeed] = useState(() => {
+    try { return getSimSpeed(); } catch { return 3; }
+  });
 
   const canManage = session ? hasPermission(session, "machines.manage") : false;
 
@@ -54,12 +57,16 @@ export default function MachinesPage() {
     refresh();
   }, []);
 
-  useSimulatorTick(live, refresh);
+  useSimulatorTick(live, speed * 1000, refresh);
 
   function toggleLive() {
     const next = !live;
     setLive(next);
     setSimLive(next);
+  }
+  function changeSpeed(v: number) {
+    setSpeed(v);
+    setSimSpeed(v);
   }
   function resetSim() {
     resetSimulation();
@@ -126,6 +133,14 @@ export default function MachinesPage() {
             <span className="dot" style={{ background: live ? "var(--ok)" : "var(--ink-faint)", color: live ? "var(--ok)" : "var(--ink-faint)" }} />
             {live ? t("live") : t("paused")}
           </button>
+          <select
+            className="btn-ghost text-[12px] font-medium px-2 py-2 rounded-lg"
+            value={speed}
+            onChange={(e) => changeSpeed(Number(e.target.value))}
+            title={t("speed")}
+          >
+            {SPEEDS.map((s) => <option key={s} value={s}>{t("every", { n: s })}</option>)}
+          </select>
           <button className="text-[11.5px] px-2 py-2 rounded-lg" style={{ color: "var(--ink-faint)" }} onClick={resetSim}>
             {t("resetSim")}
           </button>
