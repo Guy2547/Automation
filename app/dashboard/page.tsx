@@ -90,7 +90,7 @@ export default function DashboardPage() {
               </linearGradient>
             </defs>
             <circle cx="66" cy="66" r="56" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10" />
-            <circle cx="66" cy="66" r="56" fill="none" stroke="url(#gaugeGrad)" strokeWidth="10"
+            <circle cx="66" cy="66" r="56" fill="none" stroke="url(#gaugeGrad)" strokeWidth="10" className="gauge-arc"
               strokeLinecap="round" strokeDasharray="351.9" strokeDashoffset={351.9 - (351.9 * uptime) / 100}
               transform="rotate(-90 66 66)" />
           </svg>
