@@ -43,3 +43,6 @@ dev.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+AGENTS
+AI_USAGE
+CLAUDE

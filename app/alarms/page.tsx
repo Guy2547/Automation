@@ -1,17 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
-import Modal, { FormError } from "@/components/Modal";
+import Modal from "@/components/Modal";
+import TFormError from "@/components/TFormError";
 import StatusPill from "@/components/StatusPill";
 import {
   createAlarm, deleteAlarm, getSession, hasPermission, listAlarms, listMachines, updateAlarm, withPermissions,
   type Session,
 } from "@/lib/store";
+import { logActivity } from "@/lib/activity";
 import { ALARM_STATUSES, type Alarm, type AlarmStatus } from "@/lib/types";
 
 export default function AlarmsPage() {
+  const t = useTranslations("alarms");
+  const tCommon = useTranslations("common");
+  const tErr = useTranslations("errors");
+  const tStatus = useTranslations("status");
+  const trStatus = (s: string) => {
+    try {
+      return tStatus(s);
+    } catch {
+      return s;
+    }
+  };
   const [session, setSession] = useState<Session | null>(null);
   const [rows, setRows] = useState<Alarm[]>([]);
   const [q, setQ] = useState("");
@@ -60,45 +74,62 @@ export default function AlarmsPage() {
         cause: form.cause.trim() || "—",
         status: form.status,
       });
+      void logActivity("alarm.report", form.alarm_code.trim());
       setOpen(false);
       refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+      setError(e instanceof Error ? e.message : tErr("saveFailed"));
     }
   }
+
+  function changeStatus(id: string, code: string, next: AlarmStatus) {
+    updateAlarm(id, { status: next });
+    void logActivity("alarm.status", `${code} → ${next}`);
+    refresh();
+  }
+
+  function remove(id: string, code: string) {
+    if (confirm(t("confirmDelete", { code }))) {
+      deleteAlarm(id);
+      void logActivity("alarm.delete", code);
+      refresh();
+    }
+  }
+
+  const permText = canDelete ? t("permFull") : canChangeStatus ? t("permStatus") : t("permRead");
 
   return (
     <AppShell crumb="Alarms">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="text-[19px] font-bold">Alarms</div>
-          <div className="text-[13px]" style={{ color: "var(--ink-soft)" }}>All alarm events across the floor, newest first</div>
+          <div className="text-[19px] font-bold">{t("title")}</div>
+          <div className="text-[13px]" style={{ color: "var(--ink-soft)" }}>{t("subtitle")}</div>
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="alarms.csv" rows={filtered} />
-          {canReport && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={() => { setError(null); setOpen(true); }}>+ Report Alarm</button>}
+          {canReport && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={() => { setError(null); setOpen(true); }}>{t("reportBtn")}</button>}
         </div>
       </div>
 
       <div className="flex gap-2 mb-5 flex-wrap">
-        <span className="pill" style={{ background: "var(--alarm-bg)", color: "var(--alarm)", cursor: "pointer" }} onClick={() => setStatus(status === "Open" ? "" : "Open")}>Open · {counts.open}</span>
-        <span className="pill" style={{ background: "var(--maint-bg)", color: "var(--maint)", cursor: "pointer" }} onClick={() => setStatus(status === "In Progress" ? "" : "In Progress")}>In Progress · {counts.prog}</span>
-        <span className="pill" style={{ background: "var(--stop-bg)", color: "var(--stop)", cursor: "pointer" }} onClick={() => setStatus(status === "Closed" ? "" : "Closed")}>Closed · {counts.closed}</span>
+        <span className="pill" style={{ background: "var(--alarm-bg)", color: "var(--alarm)", cursor: "pointer" }} onClick={() => setStatus(status === "Open" ? "" : "Open")}>{trStatus("Open")} · {counts.open}</span>
+        <span className="pill" style={{ background: "var(--maint-bg)", color: "var(--maint)", cursor: "pointer" }} onClick={() => setStatus(status === "In Progress" ? "" : "In Progress")}>{trStatus("In Progress")} · {counts.prog}</span>
+        <span className="pill" style={{ background: "var(--stop-bg)", color: "var(--stop)", cursor: "pointer" }} onClick={() => setStatus(status === "Closed" ? "" : "Closed")}>{trStatus("Closed")} · {counts.closed}</span>
       </div>
 
       <div className="card mb-4">
         <div className="flex items-center gap-2 px-5 py-4 border-b flex-wrap" style={{ borderColor: "var(--line)" }}>
-          <input placeholder="Search code / machine / description..." className="text-[12.5px] px-3.5 py-2 rounded-lg flex-1" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input placeholder={t("searchPh")} className="text-[12.5px] px-3.5 py-2 rounded-lg flex-1" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="text-[12.5px] px-2.5 py-2 rounded-lg" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All Status</option>
-            {ALARM_STATUSES.map((s) => <option key={s}>{s}</option>)}
+            <option value="">{tCommon("allStatus")}</option>
+            {ALARM_STATUSES.map((s) => <option key={s} value={s}>{trStatus(s)}</option>)}
           </select>
-          <input type="date" className="text-[12.5px] px-2.5 py-2 rounded-lg" value={from} onChange={(e) => setFrom(e.target.value)} title="From date" />
-          <input type="date" className="text-[12.5px] px-2.5 py-2 rounded-lg" value={to} onChange={(e) => setTo(e.target.value)} title="To date" />
+          <input type="date" className="text-[12.5px] px-2.5 py-2 rounded-lg" value={from} onChange={(e) => setFrom(e.target.value)} title={t("fromDate")} />
+          <input type="date" className="text-[12.5px] px-2.5 py-2 rounded-lg" value={to} onChange={(e) => setTo(e.target.value)} title={t("toDate")} />
         </div>
         <div style={{ overflowX: "auto" }}>
         <table>
-          <thead><tr><th>Code</th><th>Machine</th><th>Description</th><th>Date/Time</th><th>Cause</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>{t("thCode")}</th><th>{t("thMachine")}</th><th>{t("thDesc")}</th><th>{t("thDate")}</th><th>{t("thCause")}</th><th>{t("thStatus")}</th><th></th></tr></thead>
           <tbody>
             {filtered.map((a) => (
               <tr key={a.id}>
@@ -112,49 +143,49 @@ export default function AlarmsPage() {
                   <select
                     className="text-[12px] px-2 py-1 rounded-md"
                     value={a.status}
-                    onChange={(e) => { updateAlarm(a.id, { status: e.target.value as AlarmStatus }); refresh(); }}
+                    onChange={(e) => changeStatus(a.id, a.alarm_code, e.target.value as AlarmStatus)}
                   >
-                    {ALARM_STATUSES.map((s) => <option key={s}>{s}</option>)}
+                    {ALARM_STATUSES.map((s) => <option key={s} value={s}>{trStatus(s)}</option>)}
                   </select>
                   ) : (
                     <StatusPill status={a.status} />
                   )}
                 </td>
                 <td className="text-right pr-4">
-                  {canDelete && <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => { if (confirm(`Delete ${a.alarm_code}?`)) { deleteAlarm(a.id); refresh(); } }}>Delete</span>}
+                  {canDelete && <span className="text-[12px]" style={{ color: "var(--alarm)", cursor: "pointer" }} onClick={() => remove(a.id, a.alarm_code)}>{tCommon("delete")}</span>}
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={7} className="text-center" style={{ color: "var(--ink-faint)" }}>No alarms found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-center" style={{ color: "var(--ink-faint)" }}>{t("noFound")}</td></tr>}
           </tbody>
         </table>
         </div>
       </div>
       <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-        Role: {session?.role} · {canDelete ? "full manage" : canChangeStatus ? "เปลี่ยนสถานะ Alarm ได้, ลบไม่ได้" : "read-only"} · Filter วันที่ (from/to) ใช้กับ export
+        {t("roleLine", { role: session?.role ?? "—", perm: permText })}
       </div>
 
       {open && (
-        <Modal title="Report Alarm" onClose={() => setOpen(false)}>
-          <FormError message={error} />
-          <div className="field"><label>Machine *</label>
+        <Modal title={t("modalTitle")} onClose={() => setOpen(false)}>
+          <TFormError error={error} />
+          <div className="field"><label>{t("fMachine")}</label>
             <select value={form.machine_id} onChange={(e) => setForm({ ...form, machine_id: e.target.value })}>
-              <option value="">— เลือกเครื่องจักร —</option>
+              <option value="">{t("fSelectMachine")}</option>
               {machines.map((m) => <option key={m.id} value={m.id}>{m.machine_id} · {m.name}</option>)}
             </select>
           </div>
-          <div className="field"><label>Alarm Code * (ห้ามซ้ำ เช่น AL-1050)</label><input value={form.alarm_code} onChange={(e) => setForm({ ...form, alarm_code: e.target.value })} placeholder="AL-1050" /></div>
-          <div className="field"><label>Description *</label><input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Motor overload" /></div>
-          <div className="field"><label>Date/Time</label><input value={form.occurred_at} onChange={(e) => setForm({ ...form, occurred_at: e.target.value })} placeholder="2026-09-15 09:41" /></div>
-          <div className="field"><label>Cause</label><input value={form.cause} onChange={(e) => setForm({ ...form, cause: e.target.value })} placeholder="Overcurrent trip" /></div>
-          <div className="field"><label>Status</label>
+          <div className="field"><label>{t("fCode")}</label><input value={form.alarm_code} onChange={(e) => setForm({ ...form, alarm_code: e.target.value })} placeholder="AL-1050" /></div>
+          <div className="field"><label>{t("fDesc")}</label><input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Motor overload" /></div>
+          <div className="field"><label>{t("fDate")}</label><input value={form.occurred_at} onChange={(e) => setForm({ ...form, occurred_at: e.target.value })} placeholder="2026-09-15 09:41" /></div>
+          <div className="field"><label>{t("fCause")}</label><input value={form.cause} onChange={(e) => setForm({ ...form, cause: e.target.value })} placeholder="Overcurrent trip" /></div>
+          <div className="field"><label>{t("fStatus")}</label>
             <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as AlarmStatus })}>
-              {ALARM_STATUSES.map((s) => <option key={s}>{s}</option>)}
+              {ALARM_STATUSES.map((s) => <option key={s} value={s}>{trStatus(s)}</option>)}
             </select>
           </div>
           <div className="flex gap-2 mt-4">
-            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setOpen(false)}>Cancel</button>
-            <button className="btn-primary text-[13px] px-3 py-2 rounded-lg flex-1" onClick={save}>Report</button>
+            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setOpen(false)}>{tCommon("cancel")}</button>
+            <button className="btn-primary text-[13px] px-3 py-2 rounded-lg flex-1" onClick={save}>{t("report")}</button>
           </div>
         </Modal>
       )}

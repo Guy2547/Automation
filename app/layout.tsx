@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import LocaleProvider from "@/components/LocaleProvider";
 
 export const metadata: Metadata = {
   title: "Alarm & Maintenance Management System",
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col"><LocaleProvider>{children}</LocaleProvider></body>
     </html>
   );
 }

@@ -1,30 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
-import Modal, { FormError } from "@/components/Modal";
+import Modal from "@/components/Modal";
+import TFormError from "@/components/TFormError";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createRole, deleteRole, getSession, listRoles, updateRole, withPermissions, type Session } from "@/lib/store";
+import { logActivity } from "@/lib/activity";
+import { errorKeyOf } from "@/lib/errorMap";
 import { PERMISSION_KEYS, type RoleRow } from "@/lib/types";
 
-const GROUPS: { label: string; keys: string[] }[] = [
-  { label: "Machines", keys: ["machines.manage"] },
-  { label: "Alarms", keys: ["alarms.status", "alarms.delete"] },
-  { label: "Maintenance", keys: ["maintenance.edit", "maintenance.delete"] },
-  { label: "Administration", keys: ["users.manage", "roles.manage"] },
-  { label: "Data", keys: ["export"] },
+const GROUPS: { key: string; keys: string[] }[] = [
+  { key: "groupMachines", keys: ["machines.manage"] },
+  { key: "groupAlarms", keys: ["alarms.status", "alarms.delete"] },
+  { key: "groupMaintenance", keys: ["maintenance.edit", "maintenance.delete"] },
+  { key: "groupAdmin", keys: ["users.manage", "roles.manage"] },
+  { key: "groupData", keys: ["export"] },
 ];
 
-const SHORT: Record<string, string> = {
-  "machines.manage": "Full machine control",
-  "alarms.status": "Change status",
-  "alarms.delete": "Delete alarms",
-  "maintenance.edit": "Create & edit records",
-  "maintenance.delete": "Delete records",
-  "users.manage": "Manage users",
-  "roles.manage": "Manage roles",
-  export: "Export CSV",
+const SHORT_KEYS: Record<string, string> = {
+  "machines.manage": "perm_machines_manage",
+  "alarms.status": "perm_alarms_status",
+  "alarms.delete": "perm_alarms_delete",
+  "maintenance.edit": "perm_maintenance_edit",
+  "maintenance.delete": "perm_maintenance_delete",
+  "users.manage": "perm_users_manage",
+  "roles.manage": "perm_roles_manage",
+  export: "perm_export",
 };
 
 const ACCENTS: Record<string, string> = {
@@ -36,6 +40,9 @@ const ACCENTS: Record<string, string> = {
 const emptyPerms = () => Object.fromEntries(PERMISSION_KEYS.map((p) => [p.key, false]));
 
 export default function RolesPage() {
+  const t = useTranslations("roles");
+  const tCommon = useTranslations("common");
+  const tErr = useTranslations("errors");
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +55,8 @@ export default function RolesPage() {
   const [preset, setPreset] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+
+  void session;
 
   async function refresh() {
     setLoading(true);
@@ -63,7 +72,7 @@ export default function RolesPage() {
       }
       setRoles(listRoles());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "โหลด roles ไม่สำเร็จ");
+      setError(e instanceof Error ? e.message : tErr("loadRolesFailed"));
     } finally {
       setLoading(false);
     }
@@ -114,7 +123,7 @@ export default function RolesPage() {
           if (error) throw new Error(error.message);
         } else {
           const clean = name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
-          if (!clean) throw new Error("Role name ห้ามว่าง (a-z, 0-9, -, _)");
+          if (!clean) throw new Error(tErr("roleNameRequired"));
           const { error } = await supabase.from("roles").insert({ name: clean, display_name: display.trim() || clean, permissions: perms, is_builtin: false });
           if (error) throw new Error(error.message);
         }
@@ -122,10 +131,11 @@ export default function RolesPage() {
         if (editing) updateRole(editing.name, { display_name: display, permissions: perms });
         else createRole({ name, display_name: display, permissions: perms });
       }
+      void logActivity(editing ? "role.update" : "role.create", editing?.name ?? name.trim());
       setOpen(false);
       await refresh();
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+      setFormError(e instanceof Error ? e.message : tErr("saveFailed"));
     }
   }
 
@@ -139,37 +149,40 @@ export default function RolesPage() {
       } else {
         deleteRole(confirmDel);
       }
+      void logActivity("role.delete", confirmDel);
       setConfirmDel(null);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
+      setError(e instanceof Error ? e.message : tErr("deleteFailed"));
       setConfirmDel(null);
     }
   }
 
   const builtIn = roles.filter((r) => r.is_builtin).length;
   const onCount = (r: RoleRow) => Object.values(r.permissions).filter(Boolean).length;
+  const errKey = errorKeyOf(error);
+  const errMsg = !error ? null : errKey ? (() => { try { return tErr(errKey); } catch { return error; } })() : error;
 
   return (
-    <AppShell crumb="Roles" mascot="Create custom roles — tick only the permissions each role needs.">
+    <AppShell crumb="Roles" mascot="roles">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="text-[19px] font-bold">Roles</div>
-          <div className="text-[13px]" style={{ color: "var(--ink-soft)" }}>Create custom roles and control permissions per role</div>
+          <div className="text-[19px] font-bold">{t("title")}</div>
+          <div className="text-[13px]" style={{ color: "var(--ink-soft)" }}>{t("subtitle")}</div>
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="roles.csv" rows={roles.map((r) => ({ name: r.name, display_name: r.display_name, permissions: onCount(r), builtin: r.is_builtin }))} />
-          <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>+ New Role</button>
+          <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>{t("newRole")}</button>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="card p-4"><div className="text-[12px] mb-2" style={{ color: "var(--ink-soft)" }}>Total roles</div><div className="text-[26px] font-bold">{roles.length}</div></div>
-        <div className="card p-4"><div className="text-[12px] mb-2" style={{ color: "var(--ink-soft)" }}>Built-in</div><div className="text-[26px] font-bold" style={{ color: "var(--gold-soft)" }}>{builtIn}</div></div>
-        <div className="card p-4"><div className="text-[12px] mb-2" style={{ color: "var(--ink-soft)" }}>Custom</div><div className="text-[26px] font-bold" style={{ color: "var(--ok)" }}>{roles.length - builtIn}</div></div>
+        <div className="card p-4"><div className="text-[12px] mb-2" style={{ color: "var(--ink-soft)" }}>{t("totalRoles")}</div><div className="text-[26px] font-bold">{roles.length}</div></div>
+        <div className="card p-4"><div className="text-[12px] mb-2" style={{ color: "var(--ink-soft)" }}>{t("builtIn")}</div><div className="text-[26px] font-bold" style={{ color: "var(--gold-soft)" }}>{builtIn}</div></div>
+        <div className="card p-4"><div className="text-[12px] mb-2" style={{ color: "var(--ink-soft)" }}>{t("custom")}</div><div className="text-[26px] font-bold" style={{ color: "var(--ok)" }}>{roles.length - builtIn}</div></div>
       </div>
 
-      {error && <div className="text-[12.5px] font-medium px-3 py-2 rounded-lg mb-4" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }}>{error}</div>}
+      {errMsg && <div className="text-[12.5px] font-medium px-3 py-2 rounded-lg mb-4" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }}>{errMsg}</div>}
 
       <div className="grid grid-cols-3 gap-4">
         {roles.map((r) => {
@@ -186,8 +199,8 @@ export default function RolesPage() {
                   <div className="mono text-[11px]" style={{ color: "var(--ink-faint)" }}>{r.name}</div>
                 </div>
                 {r.is_builtin
-                  ? <span className="pill" style={{ background: "var(--gold-bg)", color: "var(--gold-soft)" }}>built-in</span>
-                  : <span className="pill" style={{ background: "var(--ok-bg)", color: "var(--ok)" }}>custom</span>}
+                  ? <span className="pill" style={{ background: "var(--gold-bg)", color: "var(--gold-soft)" }}>{t("builtInPill")}</span>
+                  : <span className="pill" style={{ background: "var(--ok-bg)", color: "var(--ok)" }}>{t("customPill")}</span>}
               </div>
 
               <div className="flex items-center gap-2 mt-3 mb-1">
@@ -196,8 +209,8 @@ export default function RolesPage() {
               </div>
 
               {GROUPS.map((g) => (
-                <div key={g.label}>
-                  <div className="perm-group-label">{g.label}</div>
+                <div key={g.key}>
+                  <div className="perm-group-label">{t(g.key)}</div>
                   {g.keys.map((k) => {
                     const has = r.permissions[k] === true;
                     return (
@@ -205,7 +218,7 @@ export default function RolesPage() {
                         <span className="perm-check" style={has ? { background: "var(--ok-bg)", color: "var(--ok)" } : { background: "rgba(255,255,255,0.04)", color: "var(--ink-faint)" }}>
                           {has ? "✓" : "–"}
                         </span>
-                        <span style={{ color: has ? "var(--ink)" : "var(--ink-faint)" }}>{SHORT[k]}</span>
+                        <span style={{ color: has ? "var(--ink)" : "var(--ink-faint)" }}>{t(SHORT_KEYS[k])}</span>
                       </div>
                     );
                   })}
@@ -213,42 +226,42 @@ export default function RolesPage() {
               ))}
 
               <div className="flex gap-2 mt-4">
-                <button className="btn-ghost text-[12.5px] px-3 py-1.5 rounded-md flex-1" onClick={() => startEdit(r)}>Edit</button>
+                <button className="btn-ghost text-[12.5px] px-3 py-1.5 rounded-md flex-1" onClick={() => startEdit(r)}>{tCommon("edit")}</button>
                 {!r.is_builtin && (
-                  <button className="text-[12.5px] px-3 py-1.5 rounded-md flex-1" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }} onClick={() => setConfirmDel(r.name)}>Delete</button>
+                  <button className="text-[12.5px] px-3 py-1.5 rounded-md flex-1" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }} onClick={() => setConfirmDel(r.name)}>{tCommon("delete")}</button>
                 )}
               </div>
             </div>
           );
         })}
         {roles.length === 0 && !loading && (
-          <div className="card p-6 text-[13px]" style={{ color: "var(--ink-faint)" }}>No roles found</div>
+          <div className="card p-6 text-[13px]" style={{ color: "var(--ink-faint)" }}>{t("noRoles")}</div>
         )}
       </div>
 
       {open && (
-        <Modal title={editing ? `Edit role: ${editing.name}` : "New Role"} onClose={() => setOpen(false)}>
-          <FormError message={formError} />
+        <Modal title={editing ? t("editTitle", { name: editing.name }) : t("newTitle")} onClose={() => setOpen(false)}>
+          <TFormError error={formError} />
           {!editing && (
             <>
-              <div className="field"><label>Role name * (a-z, 0-9, -, _ ห้ามซ้ำ เช่น supervisor)</label>
+              <div className="field"><label>{t("fName")}</label>
                 <input value={name} onChange={(e) => setName(e.target.value)} placeholder="supervisor" />
               </div>
-              <div className="field"><label>Start from preset</label>
+              <div className="field"><label>{t("fPreset")}</label>
                 <select value={preset} onChange={(e) => applyPreset(e.target.value)}>
-                  <option value="">Blank — no permissions</option>
-                  {roles.map((r) => <option key={r.name} value={r.name}>Copy from {r.display_name || r.name}</option>)}
+                  <option value="">{t("blank")}</option>
+                  {roles.map((r) => <option key={r.name} value={r.name}>{t("copyFrom", { name: r.display_name || r.name })}</option>)}
                 </select>
               </div>
             </>
           )}
-          <div className="field"><label>Display name *</label>
+          <div className="field"><label>{t("fDisplay")}</label>
             <input value={display} onChange={(e) => setDisplay(e.target.value)} placeholder="Supervisor" />
           </div>
-          <div className="field"><label>Permissions</label>
+          <div className="field"><label>{t("fPerms")}</label>
             {GROUPS.map((g) => (
-              <div key={g.label}>
-                <div className="perm-group-label">{g.label}</div>
+              <div key={g.key}>
+                <div className="perm-group-label">{t(g.key)}</div>
                 {g.keys.map((k) => (
                   <label key={k} className="perm-row" style={{ cursor: "pointer" }}>
                     <span className="switch">
@@ -259,7 +272,7 @@ export default function RolesPage() {
                       />
                       <span className="track" />
                     </span>
-                    <span style={{ color: perms[k] ? "var(--ink)" : "var(--ink-faint)" }}>{SHORT[k]}</span>
+                    <span style={{ color: perms[k] ? "var(--ink)" : "var(--ink-faint)" }}>{t(SHORT_KEYS[k])}</span>
                     <span className="mono text-[10.5px] ml-auto" style={{ color: "var(--ink-faint)" }}>{k}</span>
                   </label>
                 ))}
@@ -267,20 +280,20 @@ export default function RolesPage() {
             ))}
           </div>
           <div className="flex gap-2 mt-4">
-            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setOpen(false)}>Cancel</button>
-            <button className="btn-primary text-[13px] px-3 py-2 rounded-lg flex-1" onClick={save}>Save Role</button>
+            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setOpen(false)}>{tCommon("cancel")}</button>
+            <button className="btn-primary text-[13px] px-3 py-2 rounded-lg flex-1" onClick={save}>{t("save")}</button>
           </div>
         </Modal>
       )}
 
       {confirmDel && (
-        <Modal title="Delete role" onClose={() => setConfirmDel(null)}>
+        <Modal title={t("delTitle")} onClose={() => setConfirmDel(null)}>
           <p className="text-[13.5px] mb-4" style={{ color: "var(--ink-soft)" }}>
-            ลบ role <b className="mono" style={{ color: "var(--alarm)" }}>{confirmDel}</b>? ถ้ามี user ใช้ role นี้อยู่จะ login แล้วไม่มีสิทธิ์ — เปลี่ยน role ของ user พวกนั้นก่อน
+            {t("delBody", { name: confirmDel })}
           </p>
           <div className="flex gap-2">
-            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setConfirmDel(null)}>Cancel</button>
-            <button className="text-[13px] px-3 py-2 rounded-lg flex-1" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }} onClick={remove}>Delete</button>
+            <button className="btn-ghost text-[13px] px-3 py-2 rounded-lg flex-1" onClick={() => setConfirmDel(null)}>{tCommon("cancel")}</button>
+            <button className="text-[13px] px-3 py-2 rounded-lg flex-1" style={{ background: "var(--alarm-bg)", color: "var(--alarm)" }} onClick={remove}>{tCommon("delete")}</button>
           </div>
         </Modal>
       )}

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 const styles: Record<string, { bg: string; fg: string }> = {
   Running: { bg: "var(--ok-bg)", fg: "var(--ok)" },
   Stop: { bg: "var(--stop-bg)", fg: "var(--stop)" },
@@ -18,11 +20,18 @@ const styles: Record<string, { bg: string; fg: string }> = {
 };
 
 export default function StatusPill({ status }: { status: string }) {
+  const t = useTranslations("status");
   const s = styles[status] ?? { bg: "var(--stop-bg)", fg: "var(--stop)" };
+  let label = status;
+  try {
+    label = t(status);
+  } catch {
+    label = status;
+  }
   return (
     <span className="pill" style={{ background: s.bg, color: s.fg, width: "fit-content" }}>
       <span className="dot" style={{ background: s.fg, color: s.fg }} />
-      {status}
+      {label}
     </span>
   );
 }

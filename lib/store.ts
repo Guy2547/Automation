@@ -85,9 +85,25 @@ export async function login(email: string, password: string): Promise<Session> {
 
   if (isSupabaseConfigured()) {
     const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+    let data;
+    try {
+      const res = await supabase.auth.signInWithPassword({ email, password });
+      data = res.data;
+      if (res.error) throw res.error;
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      console.error("[login] Supabase sign-in failed:", raw);
+      const lower = raw.toLowerCase();
+      if (lower.includes("failed to fetch") || lower.includes("fetch failed") || lower.includes("network"))
+        throw new Error("เชื่อมต่อ Supabase ไม่ได้ — ตรวจ NEXT_PUBLIC_SUPABASE_URL/ANON_KEY แล้ว restart dev server");
+      if (lower.includes("invalid api key") || lower.includes("api key"))
+        throw new Error("Supabase API key ไม่ถูกต้อง — ตรวจ ANON_KEY ใน .env.local");
+      if (lower.includes("email not confirmed"))
+        throw new Error("ยังไม่ยืนยันอีเมล — ไปกด Confirm email ใน Supabase > Authentication > Users");
+      throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+    }
     const user = data.user;
+    if (!user) throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     let role: Role = "technician";
     let name = email.split("@")[0];
     const { data: profile } = await supabase
