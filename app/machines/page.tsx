@@ -13,6 +13,7 @@ import {
   type Session,
 } from "@/lib/store";
 import { logActivity } from "@/lib/activity";
+import { isSimLive, resetSimulation, setSimLive, useSimulatorTick } from "@/lib/simulator";
 import { MACHINE_STATUSES, type Machine, type MachineStatus } from "@/lib/types";
 
 const empty = { machine_id: "", name: "", type: "", location: "", status: "Running" as MachineStatus };
@@ -38,6 +39,9 @@ export default function MachinesPage() {
   const [editing, setEditing] = useState<Machine | null>(null);
   const [form, setForm] = useState(empty);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState(() => {
+    try { return isSimLive(); } catch { return true; }
+  });
 
   const canManage = session ? hasPermission(session, "machines.manage") : false;
 
@@ -49,6 +53,18 @@ export default function MachinesPage() {
     setSession(raw ? withPermissions(raw) : null);
     refresh();
   }, []);
+
+  useSimulatorTick(live, refresh);
+
+  function toggleLive() {
+    const next = !live;
+    setLive(next);
+    setSimLive(next);
+  }
+  function resetSim() {
+    resetSimulation();
+    refresh();
+  }
 
   const locations = useMemo(() => [...new Set(rows.map((r) => r.location).filter(Boolean))], [rows]);
   const filtered = rows.filter((r) => {
@@ -102,6 +118,17 @@ export default function MachinesPage() {
         </div>
         <div className="flex gap-2">
           <ExportCsvButton filename="machines.csv" rows={filtered} />
+          <button
+            className="btn-ghost text-[12px] font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5"
+            onClick={toggleLive}
+            title={live ? t("paused") : t("live")}
+          >
+            <span className="dot" style={{ background: live ? "var(--ok)" : "var(--ink-faint)", color: live ? "var(--ok)" : "var(--ink-faint)" }} />
+            {live ? t("live") : t("paused")}
+          </button>
+          <button className="text-[11.5px] px-2 py-2 rounded-lg" style={{ color: "var(--ink-faint)" }} onClick={resetSim}>
+            {t("resetSim")}
+          </button>
           {canManage && <button className="btn-primary text-[13px] px-4 py-2.5 rounded-lg" onClick={startAdd}>{t("addMachine")}</button>}
         </div>
       </div>

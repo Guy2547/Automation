@@ -7,6 +7,7 @@ import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import StatusPill from "@/components/StatusPill";
 import { getSession, hasPermission, listAlarms, listMachines, listMaintenance, withPermissions, type Session } from "@/lib/store";
+import { isSimLive, resetSimulation, setSimLive, useSimulatorTick } from "@/lib/simulator";
 
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
@@ -23,6 +24,9 @@ export default function DashboardPage() {
   const [machines, setMachines] = useState(listMachinesSafe);
   const [alarms, setAlarms] = useState(listAlarmsSafe);
   const [maint, setMaint] = useState(listMaintSafe);
+  const [live, setLive] = useState(() => {
+    try { return isSimLive(); } catch { return true; }
+  });
 
   function listMachinesSafe() {
     try { return listMachines(); } catch { return []; }
@@ -41,6 +45,23 @@ export default function DashboardPage() {
     setAlarms(listAlarmsSafe());
     setMaint(listMaintSafe());
   }, []);
+
+  function refreshSim() {
+    setMachines(listMachinesSafe());
+    setAlarms(listAlarmsSafe());
+    setMaint(listMaintSafe());
+  }
+  useSimulatorTick(live, refreshSim);
+
+  function toggleLive() {
+    const next = !live;
+    setLive(next);
+    setSimLive(next);
+  }
+  function resetSim() {
+    resetSimulation();
+    refreshSim();
+  }
 
   const running = machines.filter((m) => m.status === "Running").length;
   const stop = machines.filter((m) => m.status === "Stop").length;
@@ -100,6 +121,17 @@ export default function DashboardPage() {
             <Link href="/machines" className="btn-primary text-[13px] px-4 py-2.5 rounded-lg text-center">{t("addMachine")}</Link>
           )}
           <ExportCsvButton filename="machines.csv" rows={machines} />
+          <button
+            className="btn-ghost text-[12px] font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-1.5"
+            onClick={toggleLive}
+            title={live ? t("paused") : t("live")}
+          >
+            <span className="dot" style={{ background: live ? "var(--ok)" : "var(--ink-faint)", color: live ? "var(--ok)" : "var(--ink-faint)" }} />
+            {live ? t("live") : t("paused")}
+          </button>
+          <button className="text-[11.5px] px-3 py-1.5 rounded-lg" style={{ color: "var(--ink-faint)" }} onClick={resetSim}>
+            {t("resetSim")}
+          </button>
         </div>
       </div>
 
