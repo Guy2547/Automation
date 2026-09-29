@@ -43,7 +43,7 @@ export default function MachinesPage() {
     try { return isSimLive(); } catch { return true; }
   });
   const [speed, setSpeed] = useState(() => {
-    try { return getSimSpeed(); } catch { return 3; }
+    try { return getSimSpeed(); } catch { return 1; }
   });
 
   const canManage = session ? hasPermission(session, "machines.manage") : false;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createAlarm,
   listAlarms,
@@ -91,10 +91,10 @@ export function tickSimulator(): boolean {
     }
   };
 
-  // 1) load drift on running machines (small, natural)
+  // 1) load drift on running machines (visible but natural)
   for (const m of machines) {
     if (m.status === "Running") {
-      const next = clamp((m.load_pct ?? 70) + rnd(-4, 4), 5, 98);
+      const next = clamp((m.load_pct ?? 70) + rnd(-8, 8), 5, 98);
       if (next !== m.load_pct) touch(m, { load_pct: next });
     }
   }
@@ -212,7 +212,7 @@ export function getSimSpeed(): number {
   } catch {
     /* ignore */
   }
-  return 3;
+  return 1;
 }
 export function setSimSpeed(sec: number) {
   try {
@@ -220,6 +220,29 @@ export function setSimSpeed(sec: number) {
   } catch {
     /* ignore */
   }
+}
+
+/** Smoothly animate a number toward `target` (eased, rAF). */
+export function useAnimatedNumber(target: number, durationMs = 800): number {
+  const [val, setVal] = useState(target);
+  const curRef = useRef(target);
+  useEffect(() => {
+    const from = curRef.current;
+    if (from === target) return;
+    let raf = 0;
+    const start = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const v = Math.round(from + (target - from) * eased);
+      curRef.current = v;
+      setVal(v);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs]);
+  return val;
 }
 
 /** Run the tick loop while `active`. Calls `refresh` after every tick. */

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import AppShell from "@/components/AppShell";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import StatusPill from "@/components/StatusPill";
 import { getSession, hasPermission, listAlarms, listMachines, listMaintenance, withPermissions, type Session } from "@/lib/store";
-import { SPEEDS, getSimSpeed, isSimLive, resetSimulation, setSimLive, setSimSpeed, useSimulatorTick } from "@/lib/simulator";
+import { SPEEDS, getSimSpeed, isSimLive, resetSimulation, setSimLive, setSimSpeed, useAnimatedNumber, useSimulatorTick } from "@/lib/simulator";
 
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
@@ -28,7 +28,7 @@ export default function DashboardPage() {
     try { return isSimLive(); } catch { return true; }
   });
   const [speed, setSpeed] = useState(() => {
-    try { return getSimSpeed(); } catch { return 3; }
+    try { return getSimSpeed(); } catch { return 1; }
   });
 
   function listMachinesSafe() {
@@ -76,11 +76,13 @@ export default function DashboardPage() {
   const maintN = machines.filter((m) => m.status === "Maintenance").length;
   const uptime = machines.length === 0 ? 100 : Math.round(((running + stop) / machines.length) * 100);
   const openAlarms = alarms.filter((a) => a.status === "Open");
+  const animatedUptime = useAnimatedNumber(uptime);
+  const simDur = { "--sim-dur": `${Math.max(0.5, speed * 0.9)}s` } as CSSProperties;
 
   return (
     <AppShell crumb="Dashboard">
       {/* HERO */}
-      <div className="hero rounded-2xl p-7 mb-6 flex items-center gap-10">
+      <div className="hero rounded-2xl p-7 mb-6 flex items-center gap-10" style={simDur}>
         <div className="flex-shrink-0 relative" style={{ width: 132, height: 132 }}>
           <svg width="132" height="132" viewBox="0 0 132 132">
             <defs>
@@ -95,7 +97,7 @@ export default function DashboardPage() {
               transform="rotate(-90 66 66)" />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-[26px] font-extrabold leading-none">{uptime}%</div>
+            <div className="text-[26px] font-extrabold leading-none tabular-nums">{animatedUptime}%</div>
             <div className="text-[10.5px] mt-1" style={{ color: "var(--ink-faint)" }}>{t("uptimeToday")}</div>
           </div>
         </div>
@@ -152,7 +154,7 @@ export default function DashboardPage() {
 
       <div className="content-grid grid grid-cols-3 gap-6">
         {/* MACHINE STATUS */}
-        <div className="col-span-2 card">
+        <div className="col-span-2 card" style={simDur}>
           <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--line)" }}>
             <h2 className="font-semibold text-[14.5px]">{t("machineStatus")}</h2>
             <Link href="/machines" className="text-[12px] font-medium" style={{ color: "var(--gold-soft)" }}>{tCommon("viewAll")}</Link>
