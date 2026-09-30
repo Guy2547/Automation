@@ -305,6 +305,7 @@
     "fillLogin": "กรุณากรอกอีเมลและรหัสผ่าน",
     "passMin": "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร",
     "badLogin": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+    "tooManyAttempts": "พยายามเข้าสู่ระบบบ่อยเกินไป — รอ 30 วินาทีแล้วลองใหม่",
     "loginFailed": "เข้าสู่ระบบไม่สำเร็จ",
     "machineIdRequired": "Machine ID ห้ามว่าง",
     "machineNameRequired": "Machine Name ห้ามว่าง",

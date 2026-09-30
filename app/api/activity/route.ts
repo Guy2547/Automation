@@ -10,7 +10,11 @@ import { createServerSupabase } from "@/lib/supabase/server";
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Server not configured: missing SUPABASE_SERVICE_ROLE_KEY");
+  // OWASP A10:2025 — never leak config state to clients; log server-side only.
+  if (!url || !key) {
+    console.error("[api/activity] missing server env (SUPABASE_SERVICE_ROLE_KEY)");
+    throw new Error("Service unavailable");
+  }
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -61,10 +65,14 @@ export async function POST(req: Request) {
       ip,
       user_agent: ua,
     });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("[api/activity] insert failed:", error.message);
+      return NextResponse.json({ error: "Log failed" }, { status: 400 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Log failed" }, { status: 500 });
+    console.error("[api/activity] POST failed:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "Log failed" }, { status: 500 });
   }
 }
 
@@ -81,9 +89,13 @@ export async function GET() {
       .select("id, email, role, action, detail, ip, user_agent, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("[api/activity] read failed:", error.message);
+      return NextResponse.json({ error: "Read failed" }, { status: 400 });
+    }
     return NextResponse.json({ rows: data ?? [] });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Read failed" }, { status: 500 });
+    console.error("[api/activity] GET failed:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "Read failed" }, { status: 500 });
   }
 }

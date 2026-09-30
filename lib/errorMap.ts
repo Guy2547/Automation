@@ -6,6 +6,7 @@ const MAP: [string, string][] = [
   ["กรุณากรอกอีเมลและรหัสผ่าน", "fillLogin"],
   ["รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", "passMin"],
   ["อีเมลหรือรหัสผ่านไม่ถูกต้อง", "badLogin"],
+  ["พยายามเข้าสู่ระบบบ่อยเกินไป", "tooManyAttempts"],
   ["เข้าสู่ระบบไม่สำเร็จ", "loginFailed"],
   ["Machine ID ห้ามว่าง", "machineIdRequired"],
   ["Machine Name ห้ามว่าง", "machineNameRequired"],

@@ -305,6 +305,7 @@
     "fillLogin": "Please enter email and password",
     "passMin": "Password must be at least 6 characters",
     "badLogin": "Invalid email or password",
+    "tooManyAttempts": "Too many login attempts — wait 30 seconds and try again",
     "loginFailed": "Login failed",
     "machineIdRequired": "Machine ID is required",
     "machineNameRequired": "Machine Name is required",

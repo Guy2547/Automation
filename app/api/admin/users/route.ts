@@ -11,9 +11,18 @@ import { createServerSupabase } from "@/lib/supabase/server";
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Server not configured: missing SUPABASE_SERVICE_ROLE_KEY");
+  // OWASP A10:2025 — never leak config state to clients; log server-side only.
+  if (!url || !key) {
+    console.error("[api/admin/users] missing server env (SUPABASE_SERVICE_ROLE_KEY)");
+    throw new Error("Service unavailable");
+  }
   return createClient(url, key, { auth: { persistSession: false } });
 }
+
+// OWASP A05:2025 Injection — strict input validation (Supabase client
+// queries are parameterized, but reject malformed input at the edge).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function requireUserManager() {
   const supabase = await createServerSupabase();
@@ -42,7 +51,7 @@ export async function POST(req: Request) {
       role?: string;
       display_name?: string;
     };
-    if (!email || !password || password.length < 6)
+    if (!email || !EMAIL_RE.test(email.trim()) || !password || password.length < 6)
       return NextResponse.json({ error: "กรุณากรอกอีเมลและรหัสผ่าน (≥6 ตัวอักษร)" }, { status: 400 });
 
     const svc = serviceClient();
@@ -55,18 +64,25 @@ export async function POST(req: Request) {
       email_confirm: true,
       user_metadata: { display_name: display_name?.trim() || undefined },
     });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("[api/admin/users] createUser failed:", error.message);
+      return NextResponse.json({ error: "สร้าง user ไม่สำเร็จ" }, { status: 400 });
+    }
 
     const { error: pErr } = await svc.from("profiles").upsert({
       id: data.user.id,
       email: email.trim().toLowerCase(),
       role: finalRole,
-      display_name: display_name?.trim() || email.split("@")[0],
+      display_name: display_name?.trim().slice(0, 100) || email.split("@")[0],
     });
-    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
+    if (pErr) {
+      console.error("[api/admin/users] profile upsert failed:", pErr.message);
+      return NextResponse.json({ error: "สร้าง user ไม่สำเร็จ" }, { status: 400 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Create user failed" }, { status: 500 });
+    console.error("[api/admin/users] POST failed:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "สร้าง user ไม่สำเร็จ" }, { status: 500 });
   }
 }
 
@@ -77,14 +93,18 @@ export async function DELETE(req: Request) {
     if (!gate) return NextResponse.json({ error: "Forbidden (needs users.manage)" }, { status: 403 });
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    if (!id || !UUID_RE.test(id)) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     if (id === gate.user.id)
       return NextResponse.json({ error: "ห้ามลบตัวเอง" }, { status: 400 });
     const svc = serviceClient();
     const { error } = await svc.auth.admin.deleteUser(id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("[api/admin/users] deleteUser failed:", error.message);
+      return NextResponse.json({ error: "ลบ user ไม่สำเร็จ" }, { status: 400 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Delete user failed" }, { status: 500 });
+    console.error("[api/admin/users] DELETE failed:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "ลบ user ไม่สำเร็จ" }, { status: 500 });
   }
 }

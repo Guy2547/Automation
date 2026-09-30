@@ -78,10 +78,51 @@ export function withPermissions(s: Session): Session {
    signInWithPassword is used (Supabase Auth stores only a bcrypt hash
    in auth.users). Without Supabase (demo mode) any password >= 6 chars
    is accepted and only the role is kept in localStorage. */
+const FAIL_KEY = "amms.loginFails";
+const MAX_FAILS = 5;
+const LOCK_MS = 30_000;
+
+function failState(): { count: number; lockedUntil: number } {
+  try {
+    const raw = localStorage.getItem(FAIL_KEY);
+    if (raw) {
+      const s = JSON.parse(raw) as { count?: number; lockedUntil?: number };
+      return { count: s.count ?? 0, lockedUntil: s.lockedUntil ?? 0 };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { count: 0, lockedUntil: 0 };
+}
+function recordFail() {
+  try {
+    const s = failState();
+    const count = s.count + 1;
+    localStorage.setItem(
+      FAIL_KEY,
+      JSON.stringify({ count, lockedUntil: count >= MAX_FAILS ? Date.now() + LOCK_MS : 0 })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+function clearFails() {
+  try {
+    localStorage.removeItem(FAIL_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function login(email: string, password: string): Promise<Session> {
   email = email.trim().toLowerCase();
   if (!email || !password) throw new Error("กรุณากรอกอีเมลและรหัสผ่าน");
   if (password.length < 6) throw new Error("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+  // OWASP A07:2025 — client-side brute-force throttle (defense in depth;
+  // real enforcement is Supabase Auth server-side rate limiting).
+  const fails = failState();
+  if (fails.lockedUntil > Date.now())
+    throw new Error("พยายามเข้าสู่ระบบบ่อยเกินไป — รอ 30 วินาทีแล้วลองใหม่");
 
   if (isSupabaseConfigured()) {
     const supabase = createClient();
@@ -100,10 +141,14 @@ export async function login(email: string, password: string): Promise<Session> {
         throw new Error("Supabase API key ไม่ถูกต้อง — ตรวจ ANON_KEY ใน .env.local");
       if (lower.includes("email not confirmed"))
         throw new Error("ยังไม่ยืนยันอีเมล — ไปกด Confirm email ใน Supabase > Authentication > Users");
+      recordFail();
       throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     }
     const user = data.user;
-    if (!user) throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+    if (!user) {
+      recordFail();
+      throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+    }
     let role: Role = "technician";
     let name = email.split("@")[0];
     const { data: profile } = await supabase
@@ -129,6 +174,7 @@ export async function login(email: string, password: string): Promise<Session> {
     }
     const s: Session = { email, role, name, permissions };
     write(S_KEY, s);
+    clearFails();
     return s;
   }
 
@@ -148,6 +194,7 @@ export async function login(email: string, password: string): Promise<Session> {
   }
   const s: Session = { email, role, name, permissions: permsFor(role) };
   write(S_KEY, s);
+  clearFails();
   return s;
 }
 
